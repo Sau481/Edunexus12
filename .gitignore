@@ -1,8 +1,51 @@
+# ======================
+# Environment variables
+# ======================
+.env
+.env.*
+!.env.example
+
+# ======================
 # Python
+# ======================
 venv/
 __pycache__/
 *.pyc
 
-# Firebase secrets (Admin SDK JSON)
+# ======================
+# Node / Frontend
+# ======================
+node_modules
+dist
+dist-ssr
+*.local
+
+# ======================
+# Firebase / Secrets
+# ======================
 backend/firebase/secrets/
 *.json
+
+# ======================
+# Logs
+# ======================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# ======================
+# Editor / OS
+# ======================
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
