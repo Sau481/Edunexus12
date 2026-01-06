@@ -1,0 +1,8 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Firebase secrets (Admin SDK JSON)
+backend/firebase/secrets/
+*.json

@@ -1,68 +1,131 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { User, UserRole } from '@/types';
-import { mockStudentUser, mockTeacherUser } from '@/data/mockData';
+import { createContext, useContext, useEffect, useState } from "react";
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import api from "@/lib/api";
+import { User, UserRole } from "@/types";
+import { toast } from "sonner";
 
 interface AuthContextType {
   user: User | null;
-  isAuthenticated: boolean;
-  login: (email: string, password: string, role: UserRole) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, role: UserRole) => Promise<boolean>;
-  logout: () => void;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<boolean>;
+  signup: (
+    name: string,
+    email: string,
+    password: string,
+    role: UserRole
+  ) => Promise<boolean>;
+  logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('edunexus-user');
-    return stored ? JSON.parse(stored) : null;
-  });
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = useCallback(async (email: string, password: string, role: UserRole): Promise<boolean> => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    // Mock authentication
-    const mockUser = role === 'student' ? mockStudentUser : mockTeacherUser;
-    const loggedInUser = { ...mockUser, email };
-    
-    setUser(loggedInUser);
-    localStorage.setItem('edunexus-user', JSON.stringify(loggedInUser));
-    return true;
+  // 🔹 Single source of truth for auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const token = await firebaseUser.getIdToken();
+        const response = await api.get("/auth/me", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUser(response.data);
+      } catch (err) {
+        console.error("Failed to load profile", err);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
-  const signup = useCallback(async (name: string, email: string, password: string, role: UserRole): Promise<boolean> => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    
-    const newUser: User = {
-      id: `user-${Date.now()}`,
-      name,
-      email,
-      role,
-    };
-    
-    setUser(newUser);
-    localStorage.setItem('edunexus-user', JSON.stringify(newUser));
-    return true;
-  }, []);
+  const login = async (
+    email: string,
+    password: string
+  ): Promise<boolean> => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return true;
+    } catch (err: any) {
+      toast.error(err.message || "Login failed");
+      return false;
+    }
+  };
 
-  const logout = useCallback(() => {
+  const signup = async (
+    name: string,
+    email: string,
+    password: string,
+    role: UserRole
+  ): Promise<boolean> => {
+    try {
+      const cred = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      const token = await cred.user.getIdToken();
+
+      const response = await api.post(
+        "/auth/profile",
+        {
+          firebase_uid: cred.user.uid,
+          email,
+          name,
+          role,
+        },
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      setUser(response.data);
+      return true;
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || err.message || "Signup failed";
+      toast.error(errorMessage);
+
+      // cleanup firebase user
+      if (auth.currentUser) {
+        await auth.currentUser.delete().catch(() => { });
+      }
+      return false;
+    }
+  };
+
+  const logout = async () => {
+    await signOut(auth);
     setUser(null);
-    localStorage.removeItem('edunexus-user');
-  }, []);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used inside AuthProvider");
   }
-  return context;
+  return ctx;
 };

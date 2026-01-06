@@ -4,31 +4,30 @@ export type UserRole = 'student' | 'teacher';
 
 export interface User {
   id: string;
+  firebase_uid: string;
   name: string;
   email: string;
   role: UserRole;
-  avatar?: string;
+  created_at?: string;
 }
 
 export interface Classroom {
   id: string;
   name: string;
+  description?: string;
   code: string;
-  teacherId: string;
-  teacherName: string;
-  studentCount: number;
-  subjects: Subject[];
-  createdAt: string;
+  created_by: string;
+  creator_name?: string;
+  created_at: string;
+  member_count?: number;
 }
 
 export interface Subject {
   id: string;
+  classroom_id: string;
   name: string;
-  classroomId: string;
-  chapters: Chapter[];
-  icon?: string;
-  subjectTeacherId?: string;
-  subjectTeacherName?: string;
+  description?: string;
+  created_at: string;
 }
 
 export interface AccessedClassroom {
@@ -37,55 +36,65 @@ export interface AccessedClassroom {
   subjectName: string;
 }
 
+export interface TeacherAccess {
+  id: string;
+  subject_id: string;
+  teacher_id: string;
+  teacher_name: string;
+  teacher_email: string;
+  created_at: string;
+}
+
 export interface Chapter {
   id: string;
+  subject_id: string;
   name: string;
-  subjectId: string;
-  noteCount: number;
-  order: number;
+  description?: string;
+  created_at: string;
 }
 
 export type NoteVisibility = 'public' | 'private';
-export type NoteStatus = 'pending' | 'approved' | 'rejected';
+export type NoteApprovalStatus = 'approved' | 'pending' | 'rejected';
 
 export interface Note {
   id: string;
+  chapter_id: string;
   title: string;
   content: string;
-  chapterId: string;
-  chapterName?: string;
-  authorId: string;
-  authorName: string;
-  authorRole: UserRole;
+  file_url?: string;
+  file_name?: string;
   visibility: NoteVisibility;
-  status: NoteStatus;
-  createdAt: string;
-  fileUrl?: string;
+  approval_status: NoteApprovalStatus;
+  uploaded_by: string;
+  uploader_name: string;
+  approved_by?: string;
+  approver_name?: string;
+  created_at: string;
 }
-
-export type QuestionVisibility = 'public' | 'private';
 
 export interface Question {
   id: string;
-  text: string;
-  chapterId: string;
-  authorId: string;
-  authorName: string;
-  visibility: QuestionVisibility;
+  chapter_id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  is_private: boolean;
   answer?: string;
-  answeredBy?: string;
-  createdAt: string;
-  answeredAt?: string;
+  answered_by?: string;
+  answered_at?: string;
+  created_at: string;
+  user_name: string;
+  answerer_name?: string;
 }
 
 export interface Announcement {
   id: string;
+  chapter_id: string;
   title: string;
   content: string;
-  classroomId: string;
-  authorId: string;
-  authorName: string;
-  createdAt: string;
+  created_by: string;
+  creator_name: string;
+  created_at: string;
 }
 
 export interface PYQ {
@@ -94,6 +103,14 @@ export interface PYQ {
   chapterId: string;
 }
 
+export interface NotebookResponse {
+  answer: string;
+  sources: { title: string; uploaded_by: string }[];
+  note_count: number;
+  chapter_name: string;
+}
+
+// UI specific types (can remain camelCase if they are not direct API responses)
 export interface Recommendation {
   id: string;
   title: string;

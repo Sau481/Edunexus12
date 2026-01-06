@@ -9,7 +9,9 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
+  envDir: "..",
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  publicDir: "../public",
   css: {
     postcss: path.resolve(__dirname, "postcss.config.js"),
   },

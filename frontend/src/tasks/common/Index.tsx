@@ -11,15 +11,25 @@ import { Classroom, Subject, Chapter } from '@/types';
 type AppView = 'dashboard' | 'classroom' | 'subject' | 'chapter';
 
 const Index = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, loading } = useAuth();
   const [currentView, setCurrentView] = useState<AppView>('dashboard');
   const [selectedClassroom, setSelectedClassroom] = useState<Classroom | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
 
-  if (!isAuthenticated) {
+  // Show loading state while checking authentication
+  if (loading) {
+    console.log("Index: Loading...");
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
+  // Show login if not authenticated
+  if (!user) {
+    console.log("Index: No user, redirecting to login");
     return <LoginPage onSuccess={() => setCurrentView('dashboard')} />;
   }
+
+  console.log("Index: Rendering dashboard for user", user.role);
 
   const handleSelectClassroom = (classroom: Classroom) => {
     setSelectedClassroom(classroom);
@@ -55,10 +65,10 @@ const Index = () => {
 
   if (currentView === 'chapter' && selectedChapter) {
     return (
-      <ChapterView 
-        chapter={selectedChapter} 
-        onBack={handleBackToSubject} 
-        userRole={user?.role || 'student'} 
+      <ChapterView
+        chapter={selectedChapter}
+        onBack={handleBackToSubject}
+        userRole={user?.role || 'student'}
       />
     );
   }
@@ -71,7 +81,7 @@ const Index = () => {
     return <ClassroomView classroom={selectedClassroom} onBack={handleBackToDashboard} onSelectSubject={handleSelectSubject} />;
   }
 
-  return user?.role === 'teacher' 
+  return user?.role === 'teacher'
     ? <TeacherDashboard onSelectClassroom={handleSelectClassroom} />
     : <StudentDashboard onSelectClassroom={handleSelectClassroom} />;
 };
