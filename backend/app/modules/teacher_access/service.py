@@ -18,13 +18,12 @@ class TeacherAccessService:
             .select("id, name, email")\
             .eq("email", teacher_email)\
             .eq("role", "teacher")\
-            .single()\
             .execute()
         
         if not teacher_response.data:
-            raise Exception("Teacher not found or user is not a teacher")
+            raise Exception("Teacher not found with this email")
         
-        teacher = teacher_response.data
+        teacher = teacher_response.data[0]
         
         # Check if already assigned
         existing = db.table("teacher_access")\
@@ -58,24 +57,60 @@ class TeacherAccessService:
         subject_id: str
     ) -> list[TeacherAccessResponse]:
         """List all teachers assigned to subject"""
-        response = db.table("teacher_access")\
-            .select("id, subject_id, teacher_id, created_at, users!inner(name, email)")\
+        # First get all teacher access records for this subject
+        access_response = db.table("teacher_access")\
+            .select("*")\
             .eq("subject_id", subject_id)\
             .execute()
         
+        if not access_response.data:
+            return []
+        
         teachers = []
-        for item in response.data:
-            teachers.append(TeacherAccessResponse(
-                id=item['id'],
-                subject_id=item['subject_id'],
-                teacher_id=item['teacher_id'],
-                teacher_name=item['users']['name'],
-                teacher_email=item['users']['email'],
-                created_at=item['created_at']
-            ))
+        for access in access_response.data:
+            # Get teacher details for each access record
+            teacher_response = db.table("users")\
+                .select("name, email")\
+                .eq("id", access['teacher_id'])\
+                .single()\
+                .execute()
+            
+            if teacher_response.data:
+                teachers.append(TeacherAccessResponse(
+                    id=access['id'],
+                    subject_id=access['subject_id'],
+                    teacher_id=access['teacher_id'],
+                    teacher_name=teacher_response.data['name'],
+                    teacher_email=teacher_response.data['email'],
+                    created_at=access['created_at']
+                ))
         
         return teachers
+    
+    async def remove_teacher(
+        self,
+        db: Client,
+        access_id: str,
+        current_user_id: str
+    ) -> None:
+        """Remove teacher access from subject"""
+        # Verify the access record exists
+        access_record = db.table("teacher_access")\
+            .select("id")\
+            .eq("id", access_id)\
+            .single()\
+            .execute()
+        
+        if not access_record.data:
+            raise Exception("Access record not found")
+        
+        # Delete the access
+        db.table("teacher_access")\
+            .delete()\
+            .eq("id", access_id)\
+            .execute()
 
 
 # Global instance
 teacher_access_service = TeacherAccessService()
+

@@ -25,7 +25,7 @@ class NoteService:
         - All notes
         """
         query = db.table("notes")\
-            .select("*, users!notes_uploaded_by_fkey!inner(name), users!notes_approved_by_fkey(name)")\
+            .select("*, uploader:users!notes_uploaded_by_fkey(name, role), approver:users!notes_approved_by_fkey(name)")\
             .eq("chapter_id", chapter_id)
         
         if role == "student":
@@ -46,9 +46,44 @@ class NoteService:
                 visibility=note['visibility'],
                 approval_status=note['approval_status'],
                 uploaded_by=note['uploaded_by'],
-                uploader_name=note['users']['name'],
+                uploader_name=note.get('uploader', {}).get('name') if note.get('uploader') else 'Unknown User',
+                uploader_role=note.get('uploader', {}).get('role') if note.get('uploader') else 'student',
                 approved_by=note.get('approved_by'),
-                approver_name=note.get('users', {}).get('name') if note.get('approved_by') else None,
+                approver_name=note.get('approver', {}).get('name') if note.get('approver') else None,
+                created_at=note['created_at']
+            ))
+        
+        return notes
+
+    async def list_user_notes(
+        self,
+        db: Client,
+        user_id: str
+    ) -> list[NoteResponse]:
+        """
+        List all notes uploaded by the user
+        """
+        response = db.table("notes")\
+            .select("*, uploader:users!notes_uploaded_by_fkey(name, role), approver:users!notes_approved_by_fkey(name)")\
+            .eq("uploaded_by", user_id)\
+            .order("created_at", desc=True)\
+            .execute()
+        
+        notes = []
+        for note in response.data:
+            notes.append(NoteResponse(
+                id=note['id'],
+                chapter_id=note['chapter_id'],
+                title=note['title'],
+                content=note['content'],
+                file_url=note.get('file_url'),
+                file_name=note.get('file_name'),
+                visibility=note['visibility'],
+                approval_status=note['approval_status'],
+                uploaded_by=note['uploaded_by'],
+                uploader_name=note.get('uploader', {}).get('name') if note.get('uploader') else 'Unknown User',
+                approved_by=note.get('approved_by'),
+                approver_name=note.get('approver', {}).get('name') if note.get('approver') else None,
                 created_at=note['created_at']
             ))
         
@@ -85,9 +120,10 @@ class NoteService:
         }).eq("id", note_id).execute()
         
         # Sync with vector DB
+        # Sync with vector DB
         if status == "approved":
             # Add to vector DB
-            vector_service.add_note_embedding(
+            await vector_service.add_note_embedding(
                 db=db,
                 note_id=note_id,
                 title=note.data['title'],
@@ -96,13 +132,13 @@ class NoteService:
         else:
             # Remove from vector DB
             try:
-                vector_service.delete_note_embedding(db=db, note_id=note_id)
+                await vector_service.delete_note_embedding(db=db, note_id=note_id)
             except:
                 pass  # Embedding might not exist
         
         # Fetch updated note with user details
         full_response = db.table("notes")\
-            .select("*, users!notes_uploaded_by_fkey!inner(name), users!notes_approved_by_fkey(name)")\
+            .select("*, uploader:users!notes_uploaded_by_fkey(name, role), approver:users!notes_approved_by_fkey(name)")\
             .eq("id", note_id)\
             .single()\
             .execute()
@@ -118,11 +154,41 @@ class NoteService:
             visibility=n['visibility'],
             approval_status=n['approval_status'],
             uploaded_by=n['uploaded_by'],
-            uploader_name=n['users']['name'],
+            uploader_name=n.get('uploader', {}).get('name') if n.get('uploader') else 'Unknown User',
+            uploader_role=n.get('uploader', {}).get('role') if n.get('uploader') else 'student',
             approved_by=n.get('approved_by'),
-            approver_name=n.get('users', {}).get('name') if n.get('approved_by') else None,
+            approver_name=n.get('approver', {}).get('name') if n.get('approver') else None,
             created_at=n['created_at']
         )
+
+
+
+    async def delete_note(
+        self,
+        db: Client,
+        user_id: str,
+        note_id: str
+    ) -> bool:
+        """Delete note (author only AND only if pending)"""
+        # First verify ownership and status
+        response = db.table("notes")\
+            .select("uploaded_by, approval_status")\
+            .eq("id", note_id)\
+            .single()\
+            .execute()
+            
+        if not response.data:
+            return False
+            
+        note = response.data
+        if note['uploaded_by'] != user_id:
+            return False # Not author
+            
+        if note['approval_status'] != 'pending':
+            raise ValueError("Cannot delete processed notes")
+            
+        db.table("notes").delete().eq("id", note_id).execute()
+        return True
 
 
 # Global instance

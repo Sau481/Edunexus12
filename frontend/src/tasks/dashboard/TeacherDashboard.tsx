@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Users, BookOpen, FileText, CheckCircle, XCircle, MessageSquare, Loader2, Trash2, Send } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
@@ -11,11 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { Textarea } from '@/components/ui/textarea';
-import { mockClassrooms, mockNotes, mockQuestions } from '@/data/mockData';
-import { Classroom, Note, Question, Subject, Chapter, AccessedClassroom } from '@/types';
+import { Classroom, Note, Question, Subject, Chapter } from '@/types';
+import { dashboardService } from './service';
+import { PDFViewer } from '@/components/common/PDFViewer';
 
 interface TeacherDashboardProps {
   onSelectClassroom: (classroom: Classroom) => void;
+  onViewAnnouncements: () => void;
+  onViewMyNotes: () => void;
 }
 
 // Available subjects to choose from
@@ -33,71 +36,105 @@ interface SubjectConfig {
   units: number;
 }
 
-export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) => {
-  const [classrooms, setClassrooms] = useState<Classroom[]>(mockClassrooms);
-  const [pendingNotes] = useState<Note[]>(mockNotes.filter(n => n.status === 'pending'));
-  const [pendingQuestions, setPendingQuestions] = useState<Question[]>(mockQuestions.filter(q => !q.answer));
+export const TeacherDashboard = ({ onSelectClassroom, onViewAnnouncements, onViewMyNotes }: TeacherDashboardProps) => {
+  const [createdClassrooms, setCreatedClassrooms] = useState<Classroom[]>([]);
+  const [accessedClassrooms, setAccessedClassrooms] = useState<Classroom[]>([]);
+  const [pendingNotes, setPendingNotes] = useState<any[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Form states
   const [newClassroomName, setNewClassroomName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  
+
   // Subject configuration state
   const [selectedSubjects, setSelectedSubjects] = useState<SubjectConfig[]>([]);
   const [currentSubject, setCurrentSubject] = useState<string>('');
   const [currentUnits, setCurrentUnits] = useState<string>('4');
-
-  // Accessed classrooms (where current teacher is subject teacher)
-  const [accessedClassrooms] = useState<AccessedClassroom[]>([
-    // Mock accessed classroom
-    {
-      classroom: {
-        id: 'class-accessed-1',
-        name: 'Mathematics 2024',
-        code: 'MATH24',
-        teacherId: 'teacher-2',
-        teacherName: 'Prof. John Doe',
-        studentCount: 28,
-        subjects: [
-          {
-            id: 'subj-calc',
-            name: 'Calculus',
-            classroomId: 'class-accessed-1',
-            icon: '📐',
-            subjectTeacherId: 'teacher-1',
-            subjectTeacherName: 'Dr. Sarah Miller',
-            chapters: [
-              { id: 'ch-calc-1', name: 'Unit 1', subjectId: 'subj-calc', noteCount: 5, order: 1 },
-              { id: 'ch-calc-2', name: 'Unit 2', subjectId: 'subj-calc', noteCount: 3, order: 2 },
-            ]
-          }
-        ],
-        createdAt: new Date().toISOString(),
-      },
-      subjectId: 'subj-calc',
-      subjectName: 'Calculus',
-    }
-  ]);
 
   // Answer question state
   const [answerDialogOpen, setAnswerDialogOpen] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(null);
   const [answerText, setAnswerText] = useState('');
 
-  // Filter classrooms - created by current teacher
-  const createdClassrooms = classrooms.filter(c => c.teacherId === 'teacher-1');
+  // Fetch Dashboard Data
+  const fetchDashboard = async () => {
+    try {
+      setLoading(true);
+      const data = await dashboardService.getTeacherDashboard();
+      setCreatedClassrooms(data.created_classrooms);
+      setAccessedClassrooms(data.accessed_classrooms);
+      setPendingNotes(data.pending_notes);
+      setPendingQuestions(data.pending_questions);
+    } catch (error) {
+      console.error('Failed to fetch dashboard:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Combined classrooms to display
-  const displayClassrooms = createdClassrooms.length > 0 
-    ? createdClassrooms 
-    : accessedClassrooms.map(ac => ac.classroom);
+  useEffect(() => {
+    fetchDashboard();
+  }, []);
+
+  const handleCreateClassroom = async () => {
+    if (!newClassroomName.trim()) return;
+
+    try {
+      setIsCreating(true);
+
+      // 1. Create the classroom
+      const classroom = await dashboardService.createClassroom(newClassroomName);
+
+      // 2. Create subjects and chapters
+      for (const subjectConfig of selectedSubjects) {
+        // Find subject info
+        const subjectInfo = availableSubjects.find(s => s.id === subjectConfig.subjectId);
+        if (!subjectInfo) continue;
+
+        // Create subject
+        const subject = await dashboardService.createSubject(
+          classroom.id,
+          subjectInfo.name,
+          `${subjectInfo.name} course content`
+        );
+
+        // Create chapters for this subject
+        for (let i = 1; i <= subjectConfig.units; i++) {
+          await dashboardService.createChapter(
+            subject.id,
+            `Unit ${i}: ${subjectInfo.name} - Part ${i}`,
+            `Chapter ${i} content`
+          );
+        }
+      }
+
+      // 3. Success - refresh dashboard and close dialog
+      await fetchDashboard();
+      setCreateDialogOpen(false);
+      setNewClassroomName('');
+      setSelectedSubjects([]);
+
+      // Show success notification
+      const { toast } = await import('sonner');
+      toast.success('Classroom created successfully!');
+
+    } catch (error: any) {
+      console.error('Failed to create classroom:', error);
+      const { toast } = await import('sonner');
+      toast.error(error.response?.data?.detail || 'Failed to create classroom');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  // ... (keep helper functions like handleAddSubject, handleRemoveSubject if needed for UI, 
+  // but for now focusing on data display removal of mock)
 
   const handleAddSubject = () => {
     if (!currentSubject || selectedSubjects.some(s => s.subjectId === currentSubject)) return;
-    
-    setSelectedSubjects([
-      ...selectedSubjects,
-      { subjectId: currentSubject, units: parseInt(currentUnits) || 4 }
-    ]);
+    setSelectedSubjects([...selectedSubjects, { subjectId: currentSubject, units: parseInt(currentUnits) || 4 }]);
     setCurrentSubject('');
     setCurrentUnits('4');
   };
@@ -106,14 +143,38 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
     setSelectedSubjects(selectedSubjects.filter(s => s.subjectId !== subjectId));
   };
 
-  const handleAnswerQuestion = () => {
+  // PDF Viewer State
+  const [pdfUrl, setPdfUrl] = useState<string>('');
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+
+  const handleViewPdf = async (url: string | undefined, noteTitle: string) => {
+    console.log('Opening PDF for:', noteTitle, 'URL:', url);
+    if (url) {
+      setPdfUrl(url);
+      setPdfViewerOpen(true);
+    } else {
+      const { toast } = await import('sonner');
+      toast.error("No document attached to this note");
+    }
+  };
+
+  const handleAnswerQuestion = async () => {
     if (!selectedQuestion || !answerText.trim()) return;
-    
-    setPendingQuestions(pendingQuestions.filter(q => q.id !== selectedQuestion.id));
-    
-    setAnswerDialogOpen(false);
-    setSelectedQuestion(null);
-    setAnswerText('');
+
+    try {
+      await dashboardService.answerQuestion(selectedQuestion.id, answerText);
+      setPendingQuestions(pendingQuestions.filter(q => q.id !== selectedQuestion.id));
+      const { toast } = await import('sonner');
+      toast.success("Question answered successfully");
+
+      setAnswerDialogOpen(false);
+      setSelectedQuestion(null);
+      setAnswerText('');
+    } catch (error) {
+      console.error("Failed to answer question", error);
+      const { toast } = await import('sonner');
+      toast.error("Failed to answer question");
+    }
   };
 
   const openAnswerDialog = (question: Question) => {
@@ -122,49 +183,46 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
     setAnswerDialogOpen(true);
   };
 
-  const handleCreateClassroom = async () => {
-    if (!newClassroomName.trim()) return;
-    setIsCreating(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // Create subjects with chapters based on configuration
-    const subjects: Subject[] = selectedSubjects.map((config, idx) => {
-      const subjectInfo = availableSubjects.find(s => s.id === config.subjectId);
-      const chapters: Chapter[] = Array.from({ length: config.units }, (_, i) => ({
-        id: `ch-new-${Date.now()}-${idx}-${i}`,
-        name: `Unit ${i + 1}`,
-        subjectId: `subj-new-${Date.now()}-${idx}`,
-        noteCount: 0,
-        order: i + 1,
-      }));
+  const handleApproveNote = async (noteId: string) => {
+    try {
+      await dashboardService.approveNote(noteId, 'approved');
+      setPendingNotes(pendingNotes.filter(n => n.id !== noteId));
+      const { toast } = await import('sonner');
+      toast.success('Note approved successfully');
+    } catch (error) {
+      console.error('Failed to approve note:', error);
+      const { toast } = await import('sonner');
+      toast.error('Failed to approve note');
+    }
+  };
 
-      return {
-        id: `subj-new-${Date.now()}-${idx}`,
-        name: subjectInfo?.name || 'Unknown Subject',
-        classroomId: `class-${Date.now()}`,
-        icon: subjectInfo?.icon || '📚',
-        chapters,
-      };
-    });
+  const handleRejectNote = async (noteId: string) => {
+    try {
+      await dashboardService.approveNote(noteId, 'rejected');
+      setPendingNotes(pendingNotes.filter(n => n.id !== noteId));
+      const { toast } = await import('sonner');
+      toast.success('Note rejected');
+    } catch (error) {
+      console.error('Failed to reject note:', error);
+      const { toast } = await import('sonner');
+      toast.error('Failed to reject note');
+    }
+  };
 
-    const newClassroom: Classroom = {
-      id: `class-${Date.now()}`,
-      name: newClassroomName,
-      code: newClassroomName.replace(/\s+/g, '').toUpperCase().slice(0, 6) + Math.random().toString(36).slice(-2).toUpperCase(),
-      teacherId: 'teacher-1',
-      teacherName: 'Dr. Sarah Miller',
-      studentCount: 0,
-      subjects,
-      createdAt: new Date().toISOString(),
-    };
-    
-    setClassrooms([newClassroom, ...classrooms]);
-    setNewClassroomName('');
-    setSelectedSubjects([]);
-    setIsCreating(false);
-    setCreateDialogOpen(false);
+  const handleDeleteClassroom = async (e: React.MouseEvent, classroomId: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this classroom? This will delete all subjects and chapters within it.')) return;
+
+    try {
+      await dashboardService.deleteClassroom(classroomId);
+      setCreatedClassrooms(createdClassrooms.filter(c => c.id !== classroomId));
+      const { toast } = await import('sonner');
+      toast.success('Classroom deleted');
+    } catch (error) {
+      console.error(error);
+      const { toast } = await import('sonner');
+      toast.error('Failed to delete classroom');
+    }
   };
 
   const container = {
@@ -180,10 +238,18 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
     show: { opacity: 1, y: 0 },
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      
+
       <main className="container px-4 sm:px-6 py-6">
         <motion.div
           variants={container}
@@ -191,7 +257,7 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
           animate="show"
           className="space-y-8"
         >
-          {/* Create Classroom Section */}
+          {/* Created Classrooms Section */}
           <motion.section variants={item}>
             <Card>
               <CardHeader>
@@ -199,9 +265,9 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Plus className="h-5 w-5 text-primary" />
-                      Manage Classrooms
+                      Created Classrooms
                     </CardTitle>
-                    <CardDescription>Create and manage your classrooms</CardDescription>
+                    <CardDescription>Classrooms you manage</CardDescription>
                   </div>
                   <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                     <DialogTrigger asChild>
@@ -211,6 +277,7 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-lg">
+                      {/* ... Dialog Content (kept same) ... */}
                       <DialogHeader>
                         <DialogTitle>Create New Classroom</DialogTitle>
                         <DialogDescription>
@@ -258,9 +325,9 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
+                            <Button
+                              type="button"
+                              variant="outline"
                               onClick={handleAddSubject}
                               disabled={!currentSubject}
                             >
@@ -317,102 +384,115 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                 </div>
               </CardHeader>
               <CardContent>
-                {/* Created Classrooms */}
-                {createdClassrooms.length > 0 && (
-                  <div className="mb-6">
-                    <h4 className="text-sm font-medium text-muted-foreground mb-3">Your Classrooms</h4>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {createdClassrooms.map((classroom) => (
-                        <motion.div
-                          key={classroom.id}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                {/* Created Classrooms List */}
+                {createdClassrooms.length > 0 ? (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {createdClassrooms.map((classroom) => (
+                      <motion.div
+                        key={classroom.id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Card
+                          className="cursor-pointer hover:border-primary/50 transition-colors"
+                          onClick={() => onSelectClassroom(classroom)}
                         >
-                          <Card
-                            className="cursor-pointer hover:border-primary/50 transition-colors"
-                            onClick={() => onSelectClassroom(classroom)}
-                          >
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-base">{classroom.name}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <BookOpen className="h-4 w-4" />
-                                  {classroom.subjects.length} subjects
-                                </span>
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Users className="h-4 w-4" />
-                                  {classroom.studentCount}
-                                </span>
-                              </div>
-                              <div className="mt-3 text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded w-fit">
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">{classroom.name}</CardTitle>
+                            {classroom.description && (
+                              <CardDescription className="line-clamp-1">{classroom.description}</CardDescription>
+                            )}
+                          </CardHeader>
+                          <CardContent>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <BookOpen className="h-4 w-4" />
+                                {classroom.subjects?.length || 0} Subjects
+                              </span>
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <Users className="h-4 w-4" />
+                                {classroom.member_count || 0}
+                              </span>
+                            </div>
+                            <div className="mt-3 flex items-center justify-between">
+                              <div className="text-xs font-mono text-primary bg-primary/10 px-2 py-1 rounded w-fit">
                                 Code: {classroom.code}
                               </div>
-                              {/* Show subject teachers */}
-                              {classroom.subjects.some(s => s.subjectTeacherName) && (
-                                <div className="mt-2 space-y-1">
-                                  {classroom.subjects.filter(s => s.subjectTeacherName).map(s => (
-                                    <p key={s.id} className="text-xs text-muted-foreground">
-                                      {s.name}: {s.subjectTeacherName}
-                                    </p>
-                                  ))}
-                                </div>
-                              )}
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      ))}
-                    </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                onClick={(e) => handleDeleteClassroom(e, classroom.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))}
                   </div>
-                )}
-
-                {/* Accessed Classrooms */}
-                {(createdClassrooms.length === 0 || accessedClassrooms.length > 0) && accessedClassrooms.length > 0 && (
-                  <div>
-                    {createdClassrooms.length > 0 && (
-                      <h4 className="text-sm font-medium text-muted-foreground mb-3">Accessed Classrooms</h4>
-                    )}
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {accessedClassrooms.map((ac) => (
-                        <motion.div
-                          key={ac.classroom.id}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                        >
-                          <Card
-                            className="cursor-pointer hover:border-primary/50 transition-colors border-dashed"
-                            onClick={() => onSelectClassroom(ac.classroom)}
-                          >
-                            <CardHeader className="pb-3">
-                              <CardTitle className="text-base">{ac.classroom.name}</CardTitle>
-                              <p className="text-xs text-primary">Subject: {ac.subjectName}</p>
-                            </CardHeader>
-                            <CardContent>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <BookOpen className="h-4 w-4" />
-                                  {ac.classroom.subjects.length} subjects
-                                </span>
-                                <span className="flex items-center gap-1 text-muted-foreground">
-                                  <Users className="h-4 w-4" />
-                                  {ac.classroom.studentCount}
-                                </span>
-                              </div>
-                              <p className="mt-2 text-xs text-muted-foreground">
-                                By: {ac.classroom.teacherName}
-                              </p>
-                            </CardContent>
-                          </Card>
-                        </motion.div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {createdClassrooms.length === 0 && accessedClassrooms.length === 0 && (
+                ) : (
                   <p className="text-center text-muted-foreground py-8">
-                    No classrooms yet. Create one to get started!
+                    No created classrooms. Create one to get started!
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </motion.section>
+
+          {/* Accessed Classrooms Section */}
+          <motion.section variants={item}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Accessed Classrooms
+                </CardTitle>
+                <CardDescription>Classrooms you're assigned to as a subject teacher</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {/* Accessed Classrooms List */}
+                {accessedClassrooms.length > 0 ? (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {accessedClassrooms.map((classroom) => (
+                      <motion.div
+                        key={classroom.id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <Card
+                          className="cursor-pointer hover:border-primary/50 transition-colors"
+                          onClick={() => onSelectClassroom(classroom)}
+                        >
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base">{classroom.name}</CardTitle>
+                            <CardDescription className="line-clamp-1">
+                              Created by: {classroom.creator_name || 'Unknown'}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <BookOpen className="h-4 w-4" />
+                                {classroom.subjects?.length || 0} Assigned Subjects
+                              </span>
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <Users className="h-4 w-4" />
+                                {classroom.member_count || 0} Students
+                              </span>
+                            </div>
+                            <div className="mt-3 text-xs font-mono text-muted-foreground bg-muted px-2 py-1 rounded w-fit">
+                              Code: {classroom.code}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-muted-foreground py-8">
+                    You haven't been assigned to any classrooms yet.
                   </p>
                 )}
               </CardContent>
@@ -462,23 +542,41 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                             pendingNotes.map((note) => (
                               <tr key={note.id} className="border-b border-border last:border-0">
                                 <td className="p-4">
-                                  <span className="font-medium">{note.title}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="font-medium cursor-pointer hover:text-primary hover:underline"
+                                      onClick={() => handleViewPdf(note.file_url, note.title)}
+                                    >
+                                      {note.title}
+                                    </span>
+                                    {note.file_url && <FileText className="h-3 w-3 text-muted-foreground" />}
+                                  </div>
                                 </td>
                                 <td className="p-4 hidden sm:table-cell text-muted-foreground">
-                                  {note.authorName}
+                                  {note.author_name}
                                 </td>
                                 <td className="p-4 hidden md:table-cell text-muted-foreground">
-                                  {note.chapterName || 'N/A'}
+                                  {note.chapter_name || 'N/A'}
                                 </td>
                                 <td className="p-4">
-                                  <StatusBadge status={note.status} />
+                                  <StatusBadge status={note.status || 'pending'} />
                                 </td>
                                 <td className="p-4 text-right">
                                   <div className="flex items-center justify-end gap-2">
-                                    <Button size="sm" variant="ghost" className="text-edu-success hover:text-edu-success">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-edu-success hover:text-edu-success"
+                                      onClick={() => handleApproveNote(note.id)}
+                                    >
                                       <CheckCircle className="h-4 w-4" />
                                     </Button>
-                                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="text-destructive hover:text-destructive"
+                                      onClick={() => handleRejectNote(note.id)}
+                                    >
                                       <XCircle className="h-4 w-4" />
                                     </Button>
                                   </div>
@@ -508,9 +606,12 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
                           <div key={question.id} className="p-4">
                             <div className="flex items-start justify-between gap-4">
                               <div className="flex-1">
-                                <p className="font-medium">{question.text}</p>
+                                <p className="font-medium">{question.title}</p>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                  Asked by {question.authorName} • {question.visibility}
+                                  {question.content}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-2">
+                                  Asked by {question.author_name} • {question.is_private ? 'Private' : 'Public'}
                                 </p>
                               </div>
                               <Button size="sm" onClick={() => openAnswerDialog(question)}>
@@ -544,10 +645,8 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
             {selectedQuestion && (
               <div className="space-y-4 py-4">
                 <div className="p-3 rounded-lg bg-muted">
-                  <p className="font-medium text-sm">{selectedQuestion.text}</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    By {selectedQuestion.authorName}
-                  </p>
+                  <p className="font-medium text-sm">{selectedQuestion.title}</p>
+                  <div className="text-sm text-muted-foreground mt-1">{selectedQuestion.content}</div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="answer">Your Answer</Label>
@@ -565,8 +664,8 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
               <Button variant="outline" onClick={() => setAnswerDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button 
-                onClick={handleAnswerQuestion} 
+              <Button
+                onClick={handleAnswerQuestion}
                 disabled={!answerText.trim()}
               >
                 <Send className="h-4 w-4 mr-2" />
@@ -576,6 +675,13 @@ export const TeacherDashboard = ({ onSelectClassroom }: TeacherDashboardProps) =
           </DialogContent>
         </Dialog>
       </main>
+
+      <PDFViewer
+        isOpen={pdfViewerOpen}
+        onClose={() => setPdfViewerOpen(false)}
+        url={pdfUrl}
+        title="Review Note"
+      />
     </div>
   );
 };

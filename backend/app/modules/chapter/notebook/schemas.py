@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Literal
 
 
 class NotebookQuery(BaseModel):
@@ -14,5 +14,21 @@ class NotebookResponse(BaseModel):
     note_count: int
     chapter_name: str
     
-    class Config:
-        from_attributes = True
+
+
+
+class RecommendationItem(BaseModel):
+    """Schema for a single recommendation"""
+    id: str
+    title: str
+    type: Literal['video', 'article']
+    url: str
+    description: str
+    thumbnail: Optional[str] = None
+
+
+class RecommendationsResponse(BaseModel):
+    """Schema for recommendations response"""
+    recommendations: list[RecommendationItem]
+    chapter_name: str
+    subject_name: str

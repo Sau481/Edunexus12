@@ -46,7 +46,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(response.data);
       } catch (err) {
         console.error("Failed to load profile", err);
+        toast.error("Failed to load user profile. Please try logging in again.");
         setUser(null);
+        // Force logout from firebase to sync states
+        await signOut(auth);
       } finally {
         setLoading(false);
       }

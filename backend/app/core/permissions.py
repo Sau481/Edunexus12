@@ -58,14 +58,33 @@ def check_classroom_access(db: Client, user_id: str, classroom_id: str) -> bool:
 def check_subject_teacher_access(db: Client, user_id: str, subject_id: str) -> bool:
     """
     Check if user is a teacher for given subject
+    
+    Returns True if:
+    - User has explicit teacher_access entry for this subject, OR
+    - User is the creator of the classroom containing this subject
     """
+    # Check explicit teacher access
     access_check = db.table("teacher_access")\
         .select("id")\
         .eq("subject_id", subject_id)\
         .eq("teacher_id", user_id)\
         .execute()
     
-    return bool(access_check.data)
+    if access_check.data:
+        return True
+    
+    # Check if user is the classroom creator
+    subject = db.table("subjects")\
+        .select("classroom_id, classrooms!inner(created_by)")\
+        .eq("id", subject_id)\
+        .limit(1)\
+        .execute()
+    
+    if subject.data and subject.data[0]['classrooms']['created_by'] == user_id:
+        return True
+    
+    return False
+
 
 
 def check_chapter_access(db: Client, user_id: str, role: str, chapter_id: str) -> dict:

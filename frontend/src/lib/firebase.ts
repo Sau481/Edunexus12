@@ -1,5 +1,21 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, Auth } from "firebase/auth";
+
+const showError = (message: string, context?: any) => {
+  console.error(message, context);
+  const errorDiv = document.createElement("div");
+  errorDiv.style.position = "fixed";
+  errorDiv.style.top = "0";
+  errorDiv.style.left = "0";
+  errorDiv.style.width = "100%";
+  errorDiv.style.backgroundColor = "red";
+  errorDiv.style.color = "white";
+  errorDiv.style.padding = "20px";
+  errorDiv.style.zIndex = "9999";
+  errorDiv.style.fontFamily = "monospace";
+  errorDiv.innerText = "FIREBASE INIT ERROR: " + message + "\n\n" + JSON.stringify(context, null, 2);
+  document.body.appendChild(errorDiv);
+};
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -9,7 +25,21 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 
-console.log("API KEY =", import.meta.env.VITE_FIREBASE_API_KEY);
+let app;
+let auth: Auth;
+
+try {
+  if (!firebaseConfig.apiKey) {
+    throw new Error("Missing VITE_FIREBASE_API_KEY");
+  }
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  console.log("Firebase initialized successfully");
+} catch (error: any) {
+  showError(error.message, { config: firebaseConfig });
+  throw error;
+}
+
+export { auth };
+

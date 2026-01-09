@@ -12,7 +12,8 @@ interface HeaderProps {
 }
 
 export const Header = ({ showBack, onBack, title }: HeaderProps) => {
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout } = useAuth();
+  const isAuthenticated = !!user;
 
   const getInitials = (name: string) => {
     return name
@@ -48,7 +49,7 @@ export const Header = ({ showBack, onBack, title }: HeaderProps) => {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          
+
           {isAuthenticated && user && (
             <>
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary">

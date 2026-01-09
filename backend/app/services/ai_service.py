@@ -4,13 +4,15 @@ from app.core.config import settings
 
 # Configure Gemini
 genai.configure(api_key=settings.GEMINI_API_KEY)
+from google.api_core import exceptions
+
 
 
 class AIService:
     """Gemini LLM interaction service"""
     
     def __init__(self):
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model = genai.GenerativeModel('models/gemini-2.5-flash')
     
     async def generate_response(
         self,
@@ -33,15 +35,19 @@ class AIService:
         """
         full_prompt = f"{context}\n\nUser Question: {prompt}" if context else prompt
         
-        response = self.model.generate_content(
-            full_prompt,
-            generation_config=genai.types.GenerationConfig(
-                max_output_tokens=max_tokens,
-                temperature=temperature
+        try:
+            response = await self.model.generate_content_async(
+                full_prompt,
+                generation_config=genai.types.GenerationConfig(
+                    max_output_tokens=max_tokens,
+                    temperature=temperature
+                )
             )
-        )
-        
-        return response.text
+            return response.text
+        except exceptions.ResourceExhausted:
+            return "I apologize, but I'm currently receiving too many requests. Please try again in 30 seconds."
+        except Exception as e:
+            return f"I encountered an error processing your request: {str(e)}"
     
     async def generate_chapter_response(
         self,

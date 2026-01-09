@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, FileUp, Eye, Loader2, CheckCircle, FolderOpen } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { mockNotes } from '@/data/mockData';
 import { useAuth } from '@/contexts/AuthContext';
 import { Note } from '@/types';
+import { chapterService } from '../service';
+import { toast } from 'sonner';
 
 interface TeacherUploadSectionProps {
   chapterId: string;
@@ -21,27 +22,83 @@ export const TeacherUploadSection = ({ chapterId }: TeacherUploadSectionProps) =
   const [content, setContent] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [myNotes, setMyNotes] = useState<Note[]>([]);
 
-  // Get teacher's notes for this chapter (all are public and approved)
-  const myNotes = mockNotes.filter(
-    (n) => n.chapterId === chapterId && n.authorId === user?.id && n.authorRole === 'teacher'
-  );
+  // File selection state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchMyNotes = async () => {
+    if (!user) return;
+    try {
+      const notes = await chapterService.listNotes(chapterId);
+      // Filter strictly for my uploads
+      setMyNotes(notes.filter(n => n.uploaded_by === user.id));
+    } catch (error) {
+      console.error('Failed to fetch my uploads', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchMyNotes();
+  }, [user, chapterId]);
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
 
   const handleUpload = async () => {
-    if (!title.trim() || !content.trim()) return;
-    
+    if ((!title.trim() && !selectedFile) || (selectedFile && !selectedFile.name)) {
+      toast.error('Please provide a title or select a file.');
+      return;
+    }
+
     setIsUploading(true);
-    // Simulate upload - teacher notes are auto-approved
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsUploading(false);
-    setUploadSuccess(true);
-    
-    // Reset form after success
-    setTimeout(() => {
-      setTitle('');
-      setContent('');
-      setUploadSuccess(false);
-    }, 2000);
+    setUploadSuccess(false);
+
+    try {
+      let fileToUpload: File;
+
+      if (selectedFile) {
+        fileToUpload = selectedFile;
+      } else {
+        const blob = new Blob([content], { type: 'text/plain' });
+        fileToUpload = new File([blob], `${title || 'untitled'}.txt`, { type: 'text/plain' });
+      }
+
+      const noteTitle = title || fileToUpload.name;
+
+      // Teacher notes always 'public' per previous logic
+      await chapterService.uploadNote(chapterId, noteTitle, 'public', fileToUpload);
+
+      setUploadSuccess(true);
+      toast.success('Note published successfully!');
+
+      await fetchMyNotes(); // Refresh the notes list
+
+      // Reset form after success
+      setTimeout(() => {
+        setTitle('');
+        setContent('');
+        setSelectedFile(null);
+        setUploadSuccess(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      const message = error.response?.data?.detail || error.message || 'Failed to publish note.';
+      toast.error(message);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   return (
@@ -110,10 +167,22 @@ export const TeacherUploadSection = ({ chapterId }: TeacherUploadSectionProps) =
 
                   <div className="space-y-2">
                     <Label>Or upload a file</Label>
-                    <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                      <FileUp className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Click to upload PDF or text file
+                    <div
+                      onClick={handleFileClick}
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${selectedFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                        }`}
+                    >
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        className="hidden"
+                        onChange={handleFileChange}
+                        accept=".pdf,.txt"
+                        data-testid="file-input"
+                      />
+                      <FileUp className={`h-8 w-8 mx-auto mb-2 ${selectedFile ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <p className={`text-sm ${selectedFile ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                        {selectedFile ? selectedFile.name : 'Click to upload PDF or text file'}
                       </p>
                     </div>
                   </div>
@@ -125,10 +194,10 @@ export const TeacherUploadSection = ({ chapterId }: TeacherUploadSectionProps) =
                     </span>
                   </div>
 
-                  <Button 
-                    className="w-full" 
+                  <Button
+                    className="w-full"
                     onClick={handleUpload}
-                    disabled={isUploading || !title.trim() || !content.trim()}
+                    disabled={isUploading || (!title.trim() && !selectedFile)}
                   >
                     {isUploading ? (
                       <>
@@ -176,7 +245,7 @@ export const TeacherUploadSection = ({ chapterId }: TeacherUploadSectionProps) =
                             <Eye className="h-3 w-3" /> Public
                           </span>
                           <span>•</span>
-                          <span>{new Date(note.createdAt).toLocaleDateString()}</span>
+                          <span>{new Date(note.created_at).toLocaleDateString()}</span>
                         </p>
                       </div>
                       <span className="text-xs px-2 py-1 rounded-full bg-edu-success/20 text-edu-success">

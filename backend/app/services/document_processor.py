@@ -1,4 +1,4 @@
-import PyPDF2
+from pdfminer.high_level import extract_text
 import io
 from typing import BinaryIO
 
@@ -8,7 +8,7 @@ class DocumentProcessor:
     
     def extract_text_from_pdf(self, file_bytes: bytes) -> str:
         """
-        Extract text from PDF file
+        Extract text from PDF file using pdfminer for better accuracy
         
         Args:
             file_bytes: PDF file content as bytes
@@ -17,14 +17,10 @@ class DocumentProcessor:
             Extracted text content
         """
         try:
+            # pdfminer expects a file-like object or path. 
+            # We use BytesIO to wrap the bytes.
             pdf_file = io.BytesIO(file_bytes)
-            pdf_reader = PyPDF2.PdfReader(pdf_file)
-            
-            text_parts = []
-            for page in pdf_reader.pages:
-                text_parts.append(page.extract_text())
-            
-            return "\n".join(text_parts)
+            return extract_text(pdf_file)
         except Exception as e:
             raise Exception(f"Error extracting PDF text: {str(e)}")
     

@@ -1,8 +1,12 @@
 import { motion } from 'framer-motion';
-import { FileText, ChevronRight } from 'lucide-react';
+import { FileText, ChevronRight, Trash2 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Subject, Chapter } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
+import { dashboardService } from '@/tasks/dashboard/service';
+import { toast } from 'sonner';
 
 interface SubjectViewProps {
   subject: Subject;
@@ -11,6 +15,22 @@ interface SubjectViewProps {
 }
 
 export const SubjectView = ({ subject, onBack, onSelectChapter }: SubjectViewProps) => {
+  const { user } = useAuth();
+  const isTeacher = user?.role === 'teacher';
+
+  const handleDeleteChapter = async (e: React.MouseEvent, chapterId: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this chapter?')) return;
+    try {
+      await dashboardService.deleteChapter(chapterId);
+      toast.success('Chapter deleted');
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete chapter');
+    }
+  };
+
   const container = {
     hidden: { opacity: 0 },
     show: {
@@ -39,7 +59,7 @@ export const SubjectView = ({ subject, onBack, onSelectChapter }: SubjectViewPro
             <div>
               <h1 className="text-2xl font-bold">{subject.name}</h1>
               <p className="text-muted-foreground mt-1">
-                {subject.chapters.length} chapters
+                {subject.chapters?.length || 0} chapters
               </p>
             </div>
           </div>
@@ -51,7 +71,7 @@ export const SubjectView = ({ subject, onBack, onSelectChapter }: SubjectViewPro
           animate="show"
           className="space-y-3"
         >
-          {subject.chapters.map((chapter, index) => (
+          {(subject.chapters || []).map((chapter, index) => (
             <motion.div key={chapter.id} variants={item}>
               <Card
                 className="cursor-pointer hover:border-primary/50 hover:bg-surface-hover transition-all group"
@@ -69,6 +89,17 @@ export const SubjectView = ({ subject, onBack, onSelectChapter }: SubjectViewPro
                         {chapter.noteCount} notes
                       </div>
                     </div>
+                    {isTeacher && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => handleDeleteChapter(e, chapter.id)}
+                        title="Delete Chapter"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                     <ChevronRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                   </div>
                 </CardContent>
@@ -76,7 +107,7 @@ export const SubjectView = ({ subject, onBack, onSelectChapter }: SubjectViewPro
             </motion.div>
           ))}
         </motion.div>
-      </main>
-    </div>
+      </main >
+    </div >
   );
 };

@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 class ClassroomCreate(BaseModel):
@@ -13,6 +13,31 @@ class ClassroomJoin(BaseModel):
     code: str
 
 
+class ChapterResponse(BaseModel):
+    """Schema for chapter response"""
+    id: str
+    subject_id: str
+    name: str
+    description: Optional[str]
+    created_at: str
+    
+    class Config:
+        from_attributes = True
+
+
+class SubjectResponse(BaseModel):
+    """Schema for subject response"""
+    id: str
+    classroom_id: str
+    name: str
+    description: Optional[str]
+    created_at: str
+    chapters: Optional[List[ChapterResponse]] = []
+    
+    class Config:
+        from_attributes = True
+
+
 class ClassroomResponse(BaseModel):
     """Schema for classroom response"""
     id: str
@@ -23,6 +48,7 @@ class ClassroomResponse(BaseModel):
     created_at: str
     creator_name: Optional[str] = None  # For joined responses
     member_count: Optional[int] = 0
+    subjects: Optional[List[SubjectResponse]] = []
     
     class Config:
         from_attributes = True
@@ -33,15 +59,3 @@ class SubjectCreate(BaseModel):
     classroom_id: str
     name: str
     description: Optional[str] = None
-
-
-class SubjectResponse(BaseModel):
-    """Schema for subject response"""
-    id: str
-    classroom_id: str
-    name: str
-    description: Optional[str]
-    created_at: str
-    
-    class Config:
-        from_attributes = True

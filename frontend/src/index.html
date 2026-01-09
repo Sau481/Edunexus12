@@ -1,26 +1,48 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Lovable App</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    <meta property="og:title" content="Lovable App" />
-    <meta property="og:description" content="Lovable Generated Project" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <!-- TODO: Set the document title to the name of your application -->
+  <title>EduNexus App</title>
+  <meta name="description" content="EduNexus - Collaborative Learning Platform" />
+  <meta name="author" content="EduNexus Team" />
 
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
-  </head>
+  <!-- TODO: Update og:title to match your application name -->
+  <meta property="og:title" content="EduNexus App" />
+  <meta property="og:description" content="EduNexus - Collaborative Learning Platform" />
+  <meta property="og:type" content="website" />
+  <!-- <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" /> -->
 
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/main.tsx"></script>
-  </body>
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@EduNexus" />
+  <!-- <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" /> -->
+</head>
+
+<body>
+  <div id="root">
+    <div style="color: white; font-family: sans-serif; padding: 20px;">
+      Loading Application... (If this persists, check console or wait for error overlay)
+    </div>
+  </div>
+  <script>
+    window.onerror = function (msg, url, line, col, error) {
+      var div = document.createElement("div");
+      div.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;background:darkred;color:white;padding:20px;font-family:monospace;white-space:pre-wrap;overflow:auto;";
+      div.innerText = "CRITICAL ERROR:\n" + msg + "\nAt: " + url + ":" + line + ":" + col + "\n\n" + (error ? error.stack : "");
+      document.body.appendChild(div);
+      return false;
+    };
+    window.addEventListener('unhandledrejection', function (event) {
+      var div = document.createElement("div");
+      div.style.cssText = "position:fixed;top:50%;left:0;width:100%;height:50%;z-index:2147483647;background:maroon;color:white;padding:20px;font-family:monospace;white-space:pre-wrap;overflow:auto;border-top: 2px solid white;";
+      div.innerText = "UNHANDLED PROMISE REJECTION:\n" + (event.reason ? (event.reason.stack || event.reason) : event.reason);
+      document.body.appendChild(div);
+    });
+  </script>
+  <script type="module" src="/main.tsx"></script>
+</body>
+
 </html>

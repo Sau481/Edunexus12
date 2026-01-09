@@ -50,3 +50,20 @@ async def list_subject_teachers(
         return await teacher_access_service.list_subject_teachers(db, subject_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{access_id}")
+async def remove_teacher_access(
+    access_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db)
+):
+    """Remove teacher access from subject"""
+    require_teacher(current_user)
+    
+    try:
+        await teacher_access_service.remove_teacher(db, access_id, current_user.user_id)
+        return {"message": "Access removed successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

@@ -27,7 +27,7 @@ class RAGService:
             dict with 'answer', 'sources', 'note_count'
         """
         # Step 1: Retrieve relevant notes from vector DB
-        retrieved_notes = vector_service.search_notes(
+        retrieved_notes = await vector_service.search_notes(
             db=db,
             query=question,
             chapter_id=chapter_id,

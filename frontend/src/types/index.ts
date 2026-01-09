@@ -9,6 +9,7 @@ export interface User {
   email: string;
   role: UserRole;
   created_at?: string;
+  avatar?: string;
 }
 
 export interface Classroom {
@@ -20,6 +21,11 @@ export interface Classroom {
   creator_name?: string;
   created_at: string;
   member_count?: number;
+  // UI aliases
+  teacherId?: string;
+  teacherName?: string;
+  studentCount?: number;
+  subjects?: Subject[];
 }
 
 export interface Subject {
@@ -28,6 +34,13 @@ export interface Subject {
   name: string;
   description?: string;
   created_at: string;
+  // UI aliases
+  icon?: string;
+  chapters?: Chapter[];
+  noteCount?: number;
+  order?: number;
+  subjectTeacherId?: string;
+  subjectTeacherName?: string;
 }
 
 export interface AccessedClassroom {
@@ -51,9 +64,14 @@ export interface Chapter {
   name: string;
   description?: string;
   created_at: string;
+  // UI aliases
+  subjectId?: string;
+  noteCount?: number;
+  order?: number;
 }
 
 export type NoteVisibility = 'public' | 'private';
+export type QuestionVisibility = 'public' | 'private';
 export type NoteApprovalStatus = 'approved' | 'pending' | 'rejected';
 
 export interface Note {
@@ -67,9 +85,17 @@ export interface Note {
   approval_status: NoteApprovalStatus;
   uploaded_by: string;
   uploader_name: string;
+  uploader_role?: string;
   approved_by?: string;
   approver_name?: string;
   created_at: string;
+  // UI aliases
+  chapterId?: string;
+  chapterName?: string;
+  authorId?: string;
+  authorName?: string;
+  authorRole?: string;
+  status?: NoteApprovalStatus;
 }
 
 export interface Question {
@@ -85,6 +111,14 @@ export interface Question {
   created_at: string;
   user_name: string;
   answerer_name?: string;
+  // UI aliases
+  text?: string;
+  chapterId?: string;
+  authorId?: string;
+  authorName?: string;
+  visibility?: NoteVisibility;
+  answeredBy?: string;
+  answeredAt?: string;
 }
 
 export interface Announcement {
@@ -116,6 +150,7 @@ export interface Recommendation {
   title: string;
   type: 'video' | 'article';
   url: string;
+  description: string;
   thumbnail?: string;
 }
 

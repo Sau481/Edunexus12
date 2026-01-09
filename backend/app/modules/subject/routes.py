@@ -45,7 +45,7 @@ async def list_subjects(
         raise HTTPException(status_code=403, detail="No access to this classroom")
     
     try:
-        return await subject_service.list_subjects(db, classroom_id)
+        return await subject_service.list_subjects(db, classroom_id, current_user.user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -93,5 +93,26 @@ async def list_chapters(
             .execute()
         
         return [ChapterResponse(**c) for c in response.data]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{subject_id}")
+async def delete_subject(
+    subject_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_db)
+):
+    """Delete subject (classroom owner only)"""
+    require_teacher(current_user)
+    try:
+        success = await subject_service.delete_subject(
+            db, current_user.user_id, subject_id
+        )
+        if not success:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this subject")
+        return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

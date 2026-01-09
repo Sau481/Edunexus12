@@ -3,7 +3,7 @@ from app.modules.chapter.community.schemas import AnnouncementCreate, Announceme
 from app.modules.chapter.community.service import community_service
 from app.core.auth import get_current_user, CurrentUser
 from app.core.permissions import require_teacher, check_chapter_access
-from app.core.supabase import get_db
+from app.core.supabase import get_db, get_admin_db
 from supabase import Client
 
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/community", tags=["Community"])
 async def create_announcement(
     announcement: AnnouncementCreate,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """Create announcement (teacher only)"""
     require_teacher(current_user)
@@ -40,7 +40,7 @@ async def create_announcement(
 async def list_announcements(
     chapter_id: str,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """List announcements for chapter (all users)"""
     # Verify chapter access
@@ -50,5 +50,17 @@ async def list_announcements(
     
     try:
         return await community_service.list_announcements(db, chapter_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/all", response_model=list[AnnouncementResponse])
+async def list_all_announcements(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
+):
+    """List all announcements for user across all chapters"""
+    try:
+        return await community_service.list_all_announcements(db, current_user.user_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

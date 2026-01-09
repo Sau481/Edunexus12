@@ -3,7 +3,7 @@ from app.modules.classroom.schemas import ClassroomCreate, ClassroomJoin, Classr
 from app.modules.classroom.service import classroom_service
 from app.core.auth import get_current_user, CurrentUser
 from app.core.permissions import require_teacher
-from app.core.supabase import get_db
+from app.core.supabase import get_db, get_admin_db
 from supabase import Client
 
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/classrooms", tags=["Classrooms"])
 async def create_classroom(
     classroom_data: ClassroomCreate,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """Create new classroom (teacher only)"""
     require_teacher(current_user)
@@ -31,7 +31,7 @@ async def create_classroom(
 async def join_classroom(
     join_data: ClassroomJoin,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """Join classroom via code (student)"""
     try:
@@ -45,7 +45,7 @@ async def join_classroom(
 @router.get("/", response_model=list[ClassroomResponse])
 async def list_classrooms(
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """
     List classrooms
@@ -57,5 +57,26 @@ async def list_classrooms(
         return await classroom_service.list_classrooms(
             db, current_user.user_id, current_user.role
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{classroom_id}")
+async def delete_classroom(
+    classroom_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
+):
+    """Delete classroom (teacher creator only)"""
+    require_teacher(current_user)
+    try:
+        success = await classroom_service.delete_classroom(
+            db, current_user.user_id, classroom_id
+        )
+        if not success:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this classroom")
+        return {"status": "success"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -34,10 +34,10 @@ export const NoteCard = ({ note, onClick, showStatus = false, showChapter = fals
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <User className="h-3 w-3" />
-              {note.authorName}
+              {note.uploader_name || note.authorName}
             </span>
             <span className="text-border">•</span>
-            <span className="capitalize">{note.authorRole}</span>
+            <span className="capitalize">{note.uploader_role || note.authorRole || 'Student'}</span>
             {note.visibility === 'private' ? (
               <span className="flex items-center gap-1 text-muted-foreground">
                 <EyeOff className="h-3 w-3" />
@@ -55,7 +55,7 @@ export const NoteCard = ({ note, onClick, showStatus = false, showChapter = fals
           )}
           {showStatus && (
             <div className="mt-2">
-              <StatusBadge status={note.status} />
+              <StatusBadge status={note.status || 'pending'} />
             </div>
           )}
           {!compact && (

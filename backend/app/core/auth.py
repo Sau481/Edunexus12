@@ -21,7 +21,7 @@ class CurrentUser:
         return self.role == "student"
 
 
-async def get_current_user(
+def get_current_user(
     authorization: str = Header(..., description="Bearer <firebase_token>"),
     db: Client = Depends(get_db)
 ) -> CurrentUser:
@@ -49,6 +49,7 @@ async def get_current_user(
         decoded_token = verify_firebase_token(token)
         firebase_uid = decoded_token['uid']
     except Exception as e:
+        # Check if it's an expired token explicitly if possible, ensuring correct 401
         raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
     
     # Fetch user from database
@@ -67,4 +68,7 @@ async def get_current_user(
             name=user_data['name']
         )
     except Exception as e:
+        # Rethrow 404
+        if "User profile not found" in str(e) or (hasattr(e, 'detail') and e.detail == "User profile not found"):
+             raise
         raise HTTPException(status_code=500, detail=f"Error fetching user: {str(e)}")

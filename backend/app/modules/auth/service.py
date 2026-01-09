@@ -6,7 +6,7 @@ from datetime import datetime
 class AuthService:
     """User authentication and profile service"""
     
-    async def create_user_profile(self, db: Client, user_data: UserCreate) -> UserResponse:
+    def create_user_profile(self, db: Client, user_data: UserCreate) -> UserResponse:
         """
         Create user profile in database
         
@@ -41,7 +41,7 @@ class AuthService:
         
         return UserResponse(**response.data[0])
     
-    async def get_user_profile(self, db: Client, user_id: str) -> UserResponse:
+    def get_user_profile(self, db: Client, user_id: str) -> UserResponse:
         """Get user profile by ID"""
         response = db.table("users")\
             .select("*")\
@@ -54,7 +54,7 @@ class AuthService:
         
         return UserResponse(**response.data)
     
-    async def get_user_by_firebase_uid(self, db: Client, firebase_uid: str) -> UserResponse | None:
+    def get_user_by_firebase_uid(self, db: Client, firebase_uid: str) -> UserResponse | None:
         """Get user profile by Firebase UID"""
         response = db.table("users")\
             .select("*")\

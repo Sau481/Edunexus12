@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Megaphone, MessageSquare, Calendar, Plus, Send } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { mockAnnouncements, mockQuestions } from '@/data/mockData';
-import { UserRole, Announcement } from '@/types';
+import { UserRole, Announcement, Question } from '@/types';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { chapterService } from '../service';
 
 interface CommunitySectionProps {
   chapterId: string;
@@ -19,13 +19,32 @@ interface CommunitySectionProps {
 
 export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps) => {
   const isTeacher = userRole === 'teacher';
-  const [announcements, setAnnouncements] = useState(mockAnnouncements);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '' });
 
+  useEffect(() => {
+    loadData();
+  }, [chapterId]);
+
+  const loadData = async () => {
+    try {
+      const [fetchedAnnouncements, fetchedQuestions] = await Promise.all([
+        chapterService.listAnnouncements(chapterId),
+        chapterService.listQuestions(chapterId)
+      ]);
+      setAnnouncements(fetchedAnnouncements);
+      setQuestions(fetchedQuestions);
+    } catch (error) {
+      console.error('Failed to load community data:', error);
+      toast.error('Failed to load community data');
+    }
+  };
+
   // Filter public questions with answers
-  const publicQA = mockQuestions.filter(
-    (q) => q.visibility === 'public' && q.answer
+  const publicQA = questions.filter(
+    (q) => !q.is_private && q.answer
   );
 
   const container = {
@@ -43,33 +62,34 @@ export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps)
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
       day: 'numeric',
       year: 'numeric'
     });
   };
 
-  const handleCreateAnnouncement = () => {
+  const handleCreateAnnouncement = async () => {
     if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) {
       toast.error('Please fill in both title and content');
       return;
     }
 
-    const announcement: Announcement = {
-      id: `ann-${Date.now()}`,
-      title: newAnnouncement.title,
-      content: newAnnouncement.content,
-      authorId: 'teacher-1',
-      authorName: 'Dr. Sarah Miller',
-      createdAt: new Date().toISOString(),
-      classroomId: 'classroom-1',
-    };
+    try {
+      const created = await chapterService.createAnnouncement(
+        chapterId,
+        newAnnouncement.title,
+        newAnnouncement.content
+      );
 
-    setAnnouncements([announcement, ...announcements]);
-    setNewAnnouncement({ title: '', content: '' });
-    setShowCreateForm(false);
-    toast.success('Announcement posted successfully!');
+      setAnnouncements([created, ...announcements]);
+      setNewAnnouncement({ title: '', content: '' });
+      setShowCreateForm(false);
+      toast.success('Announcement posted successfully!');
+    } catch (error) {
+      console.error('Failed to create announcement:', error);
+      toast.error('Failed to post announcement');
+    }
   };
 
   return (
@@ -178,9 +198,9 @@ export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps)
                         <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {formatDate(announcement.createdAt)}
+                            {formatDate(announcement.created_at)}
                           </span>
-                          <span>By {announcement.authorName}</span>
+                          <span>By {announcement.creator_name}</span>
                         </div>
                       </div>
                     </div>
@@ -194,8 +214,8 @@ export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps)
                 <Megaphone className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
                 <h3 className="text-lg font-medium">No announcements</h3>
                 <p className="text-muted-foreground">
-                  {isTeacher 
-                    ? 'Click the button above to create your first announcement.' 
+                  {isTeacher
+                    ? 'Click the button above to create your first announcement.'
                     : 'Announcements from your teacher will appear here.'}
                 </p>
               </Card>
@@ -218,15 +238,15 @@ export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps)
                       <div className="space-y-3">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium">{question.authorName}</span>
+                            <span className="text-sm font-medium">{question.user_name}</span>
                             <span className="text-xs text-muted-foreground">asked</span>
                           </div>
-                          <p className="text-foreground">{question.text}</p>
+                          <p className="text-foreground">{question.content}</p>
                         </div>
 
                         <div className="p-3 bg-secondary rounded-lg">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-sm font-medium text-primary">{question.answeredBy}</span>
+                            <span className="text-sm font-medium text-primary">{question.answerer_name || 'Teacher'}</span>
                             <span className="text-xs text-muted-foreground">answered</span>
                           </div>
                           <p className="text-sm">{question.answer}</p>
@@ -261,3 +281,4 @@ export const CommunitySection = ({ chapterId, userRole }: CommunitySectionProps)
     </div>
   );
 };
+

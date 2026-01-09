@@ -25,6 +25,8 @@ dist-ssr
 # ======================
 backend/firebase/secrets/
 *.json
+!frontend/tsconfig.json
+!frontend/configs/*.json
 
 # ======================
 # Logs

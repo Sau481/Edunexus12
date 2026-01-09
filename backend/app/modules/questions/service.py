@@ -10,6 +10,7 @@ class QuestionService:
         self,
         db: Client,
         user_id: str,
+        user_name: str,
         chapter_id: str,
         title: str,
         content: str,
@@ -25,15 +26,8 @@ class QuestionService:
             "created_at": datetime.utcnow().isoformat()
         }).execute()
         
-        # Fetch with user details
-        question_id = response.data[0]['id']
-        full_response = db.table("questions")\
-            .select("*, users!inner(name)")\
-            .eq("id", question_id)\
-            .single()\
-            .execute()
-        
-        question = full_response.data
+        # Construct response directly from insert result + known user info
+        question = response.data[0]
         return QuestionResponse(
             id=question['id'],
             chapter_id=question['chapter_id'],
@@ -41,11 +35,11 @@ class QuestionService:
             title=question['title'],
             content=question['content'],
             is_private=question['is_private'],
-            answer=question.get('answer'),
-            answered_by=question.get('answered_by'),
-            answered_at=question.get('answered_at'),
+            answer=None,
+            answered_by=None,
+            answered_at=None,
             created_at=question['created_at'],
-            user_name=question['users']['name']
+            user_name=user_name
         )
     
     async def list_questions(
@@ -62,7 +56,7 @@ class QuestionService:
         - Teachers: all questions
         """
         query = db.table("questions")\
-            .select("*, users!questions_user_id_fkey!inner(name), users!questions_answered_by_fkey(name)")\
+            .select("*, author:users!questions_user_id_fkey(name), answerer:users!questions_answered_by_fkey(name)")\
             .eq("chapter_id", chapter_id)
         
         if role == "student":
@@ -84,10 +78,71 @@ class QuestionService:
                 answered_by=q.get('answered_by'),
                 answered_at=q.get('answered_at'),
                 created_at=q['created_at'],
-                user_name=q['users']['name'],
-                answerer_name=q.get('users', {}).get('name') if q.get('answered_by') else None
+                user_name=q.get('author', {}).get('name') if q.get('author') else 'Unknown User',
+                answerer_name=q.get('answerer', {}).get('name') if q.get('answerer') else None
             ))
         
+        return questions
+
+    async def list_community_questions(
+        self,
+        db: Client,
+        chapter_id: str
+    ) -> list[QuestionResponse]:
+        """List public answered questions for community view"""
+        response = db.table("questions")\
+            .select("*, author:users!questions_user_id_fkey(name), answerer:users!questions_answered_by_fkey(name)")\
+            .eq("chapter_id", chapter_id)\
+            .eq("is_private", False)\
+            .not_.is_("answer", "null")\
+            .execute()
+            
+        questions = []
+        for q in response.data:
+            questions.append(QuestionResponse(
+                id=q['id'],
+                chapter_id=q['chapter_id'],
+                user_id=q['user_id'],
+                title=q['title'],
+                content=q['content'],
+                is_private=q['is_private'],
+                answer=q.get('answer'),
+                answered_by=q.get('answered_by'),
+                answered_at=q.get('answered_at'),
+                created_at=q['created_at'],
+                user_name=q.get('author', {}).get('name') if q.get('author') else 'Unknown User',
+                answerer_name=q.get('answerer', {}).get('name') if q.get('answerer') else None
+            ))
+        return questions
+
+    async def list_user_questions(
+        self,
+        db: Client,
+        user_id: str
+    ) -> list[QuestionResponse]:
+        """List all questions by user"""
+        response = db.table("questions")\
+            .select("*, author:users!questions_user_id_fkey(name), answerer:users!questions_answered_by_fkey(name)")\
+            .eq("user_id", user_id)\
+            .order("created_at", desc=True)\
+            .execute()
+            
+        questions = []
+        for q in response.data:
+            questions.append(QuestionResponse(
+                id=q['id'],
+                chapter_id=q['chapter_id'],
+                user_id=q['user_id'],
+                title=q['title'],
+                content=q['content'],
+                is_private=q['is_private'],
+                answer=q.get('answer'),
+                answered_by=q.get('answered_by'),
+                answered_at=q.get('answered_at'),
+                created_at=q['created_at'],
+                user_name=q.get('author', {}).get('name') if q.get('author') else 'Unknown User',
+                answerer_name=q.get('answerer', {}).get('name') if q.get('answerer') else None
+            ))
         return questions
     
     async def answer_question(
@@ -106,7 +161,7 @@ class QuestionService:
         
         # Fetch with user details
         full_response = db.table("questions")\
-            .select("*, users!questions_user_id_fkey!inner(name), users!questions_answered_by_fkey!inner(name)")\
+            .select("*, author:users!questions_user_id_fkey(name), answerer:users!questions_answered_by_fkey(name)")\
             .eq("id", question_id)\
             .single()\
             .execute()
@@ -123,9 +178,34 @@ class QuestionService:
             answered_by=q['answered_by'],
             answered_at=q['answered_at'],
             created_at=q['created_at'],
-            user_name=q['users']['name'],
-            answerer_name=q['users']['name'] if q.get('answered_by') else None
+            user_name=q.get('author', {}).get('name') if q.get('author') else 'Unknown User',
+            answerer_name=q.get('answerer', {}).get('name') if q.get('answerer') else None
         )
+
+
+
+    def delete_question(
+        self,
+        db: Client,
+        user_id: str,
+        question_id: str
+    ) -> bool:
+        """Delete question (author only)"""
+        # Check ownership
+        response = db.table("questions")\
+            .select("user_id")\
+            .eq("id", question_id)\
+            .single()\
+            .execute()
+            
+        if not response.data:
+            return False
+            
+        if response.data['user_id'] != user_id:
+            return False
+            
+        db.table("questions").delete().eq("id", question_id).execute()
+        return True
 
 
 # Global instance

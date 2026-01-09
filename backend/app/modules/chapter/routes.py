@@ -1,32 +1,53 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 from app.modules.chapter.schemas import ChapterCreate, ChapterResponse
-from app.modules.chapter.service import ChapterService
-from app.core.permissions import get_current_teacher, get_current_user
+from app.modules.chapter.service import chapter_service
+from app.core.auth import get_current_user, CurrentUser
+from app.core.permissions import require_teacher
+from app.core.supabase import get_db, get_admin_db
+from supabase import Client
 
-# Sub-module routers
-# Will import and include them after implementation
-# from app.modules.chapter.notes.routes import router as notes_router
-
-router = APIRouter()
-service = ChapterService()
+router = APIRouter(prefix="/chapters", tags=["Chapters"])
 
 @router.post("/", response_model=ChapterResponse)
 async def create_chapter(
     chapter: ChapterCreate, 
-    teacher: dict = Depends(get_current_teacher)
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
 ):
-    return await service.create_chapter(chapter)
+    require_teacher(current_user)
+    try:
+        return await chapter_service.create_chapter(db, chapter)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/subject/{subject_id}", response_model=List[ChapterResponse])
 async def list_chapters(
     subject_id: str,
-    user: dict = Depends(get_current_user)
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
 ):
-    return await service.get_chapters_by_subject(subject_id)
+    try:
+        return await chapter_service.get_chapters_by_subject(db, subject_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-# We will mount sub-modules in main.py or here. 
-# Conventionally, if they are sub-resources of chapter, we might structure URLs like /chapter/{id}/notes
-# But user folder structure treats them as modules. 
-# I will implement them as separate routers and we can decide how to mount them.
-# The user asked for "chapter/notes/routes.py", etc.
+@router.delete("/{chapter_id}")
+async def delete_chapter(
+    chapter_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
+):
+    """Delete chapter (teacher only)"""
+    require_teacher(current_user)
+    try:
+        success = await chapter_service.delete_chapter(
+            db, current_user.user_id, chapter_id
+        )
+        if not success:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this chapter")
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

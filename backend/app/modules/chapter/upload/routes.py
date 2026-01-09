@@ -3,7 +3,7 @@ from app.modules.chapter.upload.schemas import NoteUploadResponse
 from app.modules.chapter.upload.service import upload_service
 from app.core.auth import get_current_user, CurrentUser
 from app.core.permissions import check_chapter_access
-from app.core.supabase import get_db
+from app.core.supabase import get_db, get_admin_db
 from supabase import Client
 
 
@@ -17,7 +17,7 @@ async def upload_note(
     visibility: str = Form(...),  # 'public' or 'private'
     file: UploadFile = File(...),
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """
     Upload note file (PDF/TXT)

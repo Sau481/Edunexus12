@@ -68,7 +68,7 @@ QDRANT_API_KEY=optional-api-key
 ### 4. Setup Supabase
 
 1. Create Supabase project
-2. Run migrations (see `supabase/migrations/`)
+2. Run migrations (see `supabase_migrations/migrations/`)
 3. Create storage bucket: `notes`
 
 ### 5. Run Qdrant (Local)
@@ -132,7 +132,7 @@ API docs: `http://localhost:8000/docs`
 
 ## Database Schema
 
-See `supabase/migrations/` for full schema.
+See `supabase_migrations/migrations/` for full schema.
 
 Key tables:
 - `users` - User profiles
@@ -184,7 +184,7 @@ backend/
 │   └── main.py         # FastAPI app
 ├── firebase/
 │   └── secrets/        # Firebase credentials
-├── supabase/
+├── supabase_migrations/
 │   └── migrations/     # Database schema
 ├── .env
 └── requirements.txt

@@ -14,6 +14,7 @@ class NoteResponse(BaseModel):
     approval_status: Literal['approved', 'pending', 'rejected']
     uploaded_by: str
     uploader_name: str
+    uploader_role: Optional[str] = 'student'
     approved_by: Optional[str] = None
     approver_name: Optional[str] = None
     created_at: str

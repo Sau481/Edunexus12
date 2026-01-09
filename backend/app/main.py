@@ -12,6 +12,7 @@ from app.modules.chapter.notes.routes import router as notes_router
 from app.modules.chapter.upload.routes import router as upload_router
 from app.modules.chapter.notebook.routes import router as notebook_router
 from app.modules.chapter.community.routes import router as community_router
+from app.modules.dashboard.routes import router as dashboard_router
 
 
 # Initialize FastAPI app
@@ -40,6 +41,7 @@ app.include_router(notes_router, prefix=settings.API_V1_STR)
 app.include_router(upload_router, prefix=settings.API_V1_STR)
 app.include_router(notebook_router, prefix=settings.API_V1_STR)
 app.include_router(community_router, prefix=settings.API_V1_STR)
+app.include_router(dashboard_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

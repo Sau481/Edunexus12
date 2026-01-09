@@ -10,6 +10,8 @@ logger = logging.getLogger(__name__)
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 
+import asyncio
+
 class VectorService:
     """Supabase pgvector service for semantic search"""
     
@@ -19,13 +21,7 @@ class VectorService:
     
     def _generate_embedding(self, text: str) -> list[float]:
         """
-        Generate embedding using Gemini
-        
-        Args:
-            text: Text to embed
-            
-        Returns:
-            768-dimensional embedding vector
+        Generate embedding using Gemini (Synchronous helper)
         """
         try:
             result = genai.embed_content(
@@ -37,8 +33,8 @@ class VectorService:
         except Exception as e:
             logger.error(f"Failed to generate embedding: {e}")
             raise
-    
-    def add_note_embedding(
+            
+    async def add_note_embedding(
         self,
         db: Client,
         note_id: str,
@@ -47,55 +43,47 @@ class VectorService:
     ):
         """
         Generate and store embedding for a note
-        
-        Called when note is approved
-        
-        Args:
-            db: Supabase client
-            note_id: ID of the note
-            title: Note title
-            content: Note content
         """
         try:
             # Combine title and content for better semantic search
             text = f"{title}\n{content}"
-            embedding = self._generate_embedding(text)
             
-            # Update note with embedding
-            db.table("notes").update({
-                "embedding": embedding
-            }).eq("id", note_id).execute()
+            # Run embedding generation in thread to avoid blocking
+            embedding = await asyncio.to_thread(self._generate_embedding, text)
+            
+            # Run DB update in thread
+            await asyncio.to_thread(
+                lambda: db.table("notes").update({
+                    "embedding": embedding
+                }).eq("id", note_id).execute()
+            )
             
             logger.info(f"Added embedding for note {note_id}")
         except Exception as e:
             logger.error(f"Failed to add embedding for note {note_id}: {e}")
             # Don't raise - embedding is optional, note should still be saved
     
-    def delete_note_embedding(
+    async def delete_note_embedding(
         self,
         db: Client,
         note_id: str
     ):
         """
         Remove embedding from a note
-        
-        Called when note is rejected or deleted
-        
-        Args:
-            db: Supabase client
-            note_id: ID of the note
         """
         try:
-            # Set embedding to NULL
-            db.table("notes").update({
-                "embedding": None
-            }).eq("id", note_id).execute()
+            # Run DB update in thread
+            await asyncio.to_thread(
+                lambda: db.table("notes").update({
+                    "embedding": None
+                }).eq("id", note_id).execute()
+            )
             
             logger.info(f"Deleted embedding for note {note_id}")
         except Exception as e:
             logger.error(f"Failed to delete embedding for note {note_id}: {e}")
     
-    def search_notes(
+    async def search_notes(
         self,
         db: Client,
         query: str,
@@ -103,30 +91,23 @@ class VectorService:
         limit: int = 5
     ) -> list[dict]:
         """
-        Search for relevant notes in a chapter using semantic similarity
-        
-        Args:
-            db: Supabase client
-            query: User's question
-            chapter_id: Limit search to this chapter
-            limit: Max number of results
-            
-        Returns:
-            List of relevant notes with similarity scores
+        Search for relevant notes using semantic similarity
         """
         try:
-            # Generate query embedding
-            query_embedding = self._generate_embedding(query)
+            # Generate query embedding in thread
+            query_embedding = await asyncio.to_thread(self._generate_embedding, query)
             
-            # Call the search function created in migration
-            response = db.rpc(
-                "search_notes_by_similarity",
-                {
-                    "query_embedding": query_embedding,
-                    "target_chapter_id": chapter_id,
-                    "result_limit": limit
-                }
-            ).execute()
+            # Run DB search in thread
+            response = await asyncio.to_thread(
+                lambda: db.rpc(
+                    "search_notes_by_similarity",
+                    {
+                        "query_embedding": query_embedding,
+                        "target_chapter_id": chapter_id,
+                        "result_limit": limit
+                    }
+                ).execute()
+            )
             
             return response.data if response.data else []
         except Exception as e:

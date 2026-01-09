@@ -26,7 +26,7 @@ export const LoginForm = ({ role, onSuccess, onSwitchToSignup }: LoginFormProps)
     setIsLoading(true);
 
     try {
-      const success = await login(email, password, role);
+      const success = await login(email, password);
       if (success) {
         onSuccess();
       } else {

@@ -1,16 +1,19 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, FileUp, Eye, EyeOff, Loader2, CheckCircle } from 'lucide-react';
+import { Upload, FileUp, Eye, EyeOff, Loader2, CheckCircle, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Textarea } from '@/components/ui/textarea';
-import { StatusBadge } from '@/components/common/StatusBadge';
-import { mockNotes } from '@/data/mockData';
+import { Badge } from '@/components/ui/badge';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { NoteVisibility, Note } from '@/types';
+import { toast } from 'sonner';
+import { chapterService } from '../service';
+import { cn } from '@/lib/utils';
 
 interface UploadSectionProps {
   chapterId: string;
@@ -23,25 +26,83 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
   const [visibility, setVisibility] = useState<NoteVisibility>('public');
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [myNotes, setMyNotes] = useState<Note[]>([]);
 
-  // Get user's notes for this chapter
-  const myNotes = mockNotes.filter((n) => n.chapterId === chapterId && n.authorId === user?.id);
+  // File selection state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    fetchMyNotes();
+  }, [chapterId, user]);
+
+  const fetchMyNotes = async () => {
+    if (!user) return;
+    try {
+      // Use listMyNotes to fetch ALL user notes, then filter by this chapter
+      // This avoids backend visibility rules for the general list hiding pending/private notes inadvertently
+      // or relying on complex client-side filtering of the public list.
+      const allMyNotes = await chapterService.listMyNotes();
+      setMyNotes(allMyNotes.filter(n => n.chapter_id === chapterId));
+    } catch (error) {
+      console.error('Failed to fetch my uploads', error);
+    }
+  };
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+    }
+  };
 
   const handleUpload = async () => {
-    if (!title.trim() || !content.trim()) return;
-    
+    if ((!title.trim() && !selectedFile) || (selectedFile && !selectedFile.name)) {
+      toast.error("Please provide a title or select a file.");
+      return;
+    }
+
     setIsUploading(true);
-    // Simulate upload
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsUploading(false);
-    setUploadSuccess(true);
-    
-    // Reset form after success
-    setTimeout(() => {
+    setUploadSuccess(false);
+
+    try {
+      let fileToUpload: File;
+
+      if (selectedFile) {
+        fileToUpload = selectedFile;
+      } else {
+        const blob = new Blob([content], { type: 'text/plain' });
+        fileToUpload = new File([blob], `${title || 'untitled'}.txt`, { type: 'text/plain' });
+      }
+
+      const noteTitle = title || fileToUpload.name;
+
+      const uploadedNote = await chapterService.uploadNote(chapterId, noteTitle, visibility, fileToUpload);
+
+      // Add to myNotes immediately for instant feedback
+      setMyNotes(prev => [uploadedNote, ...prev]);
+
+      setUploadSuccess(true);
+      toast.success('Note uploaded successfully!');
+
+      // Reset form after success
       setTitle('');
       setContent('');
-      setUploadSuccess(false);
-    }, 2000);
+      setSelectedFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+    } catch (error: any) {
+      console.error('Upload error:', error);
+      const message = error.response?.data?.detail || error.message || 'Failed to publish note.';
+      toast.error(message);
+    } finally {
+      setIsUploading(false);
+      setTimeout(() => setUploadSuccess(false), 2000); // Hide success message after a delay
+    }
   };
 
   return (
@@ -71,8 +132,8 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
                 <CheckCircle className="h-12 w-12 text-edu-success mx-auto mb-4" />
                 <h3 className="text-lg font-medium">Note Uploaded!</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {visibility === 'public' 
-                    ? 'Waiting for teacher approval' 
+                  {visibility === 'public'
+                    ? 'Waiting for teacher approval'
                     : 'Your private note is saved'}
                 </p>
               </motion.div>
@@ -101,10 +162,21 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
 
                 <div className="space-y-2">
                   <Label>Or upload a file</Label>
-                  <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors cursor-pointer">
-                    <FileUp className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      Click to upload PDF or text file
+                  <div
+                    onClick={handleFileClick}
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${selectedFile ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                      }`}
+                  >
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      onChange={handleFileChange}
+                      accept=".pdf,.txt"
+                    />
+                    <FileUp className={`h-8 w-8 mx-auto mb-2 ${selectedFile ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <p className={`text-sm ${selectedFile ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                      {selectedFile ? selectedFile.name : 'Click to upload PDF or text file'}
                     </p>
                   </div>
                 </div>
@@ -138,10 +210,10 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
                   )}
                 </div>
 
-                <Button 
-                  className="w-full" 
+                <Button
+                  className="w-full"
                   onClick={handleUpload}
-                  disabled={isUploading || !title.trim() || !content.trim()}
+                  disabled={isUploading || (!title.trim() && !selectedFile)}
                 >
                   {isUploading ? (
                     <>
@@ -168,7 +240,7 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
       >
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">My Uploads in This Chapter</CardTitle>
+            <CardTitle className="text-sm">My Uploads</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -192,7 +264,7 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
                         )}
                       </p>
                     </div>
-                    <StatusBadge status={note.status} />
+                    <StatusBadge note={note} onDelete={() => setMyNotes(prev => prev.filter(n => n.id !== note.id))} />
                   </div>
                 ))
               ) : (
@@ -204,7 +276,42 @@ export const UploadSection = ({ chapterId }: UploadSectionProps) => {
             </div>
           </CardContent>
         </Card>
-      </motion.div>
+      </motion.div >
+    </div >
+  );
+};
+
+const StatusBadge = ({ note, onDelete }: { note: Note; onDelete: () => void }) => {
+  const isPending = note.approval_status === 'pending';
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this pending note?')) return;
+    try {
+      await chapterService.deleteNote(note.id);
+      onDelete(); // Optimistic UI update
+      toast.success('Note deleted');
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete note');
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <Badge variant="outline" className={cn(
+        "capitalize",
+        note.approval_status === 'approved' && "bg-green-500/10 text-green-500 border-green-500/20",
+        note.approval_status === 'rejected' && "bg-red-500/10 text-red-500 border-red-500/20",
+        note.approval_status === 'pending' && "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+      )}>
+        {note.approval_status}
+      </Badge>
+      {isPending && (
+        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={handleDelete}>
+          <Trash2 className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 };

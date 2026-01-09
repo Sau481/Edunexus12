@@ -3,7 +3,7 @@ from app.modules.chapter.notes.schemas import NoteResponse, NoteApprovalUpdate
 from app.modules.chapter.notes.service import note_service
 from app.core.auth import get_current_user, CurrentUser
 from app.core.permissions import require_teacher, check_chapter_access
-from app.core.supabase import get_db
+from app.core.supabase import get_db, get_admin_db
 from supabase import Client
 
 
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/notes", tags=["Notes"])
 async def list_notes(
     chapter_id: str,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """
     List notes for chapter
@@ -35,12 +35,26 @@ async def list_notes(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/my-notes", response_model=list[NoteResponse])
+async def list_my_notes(
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
+):
+    """List all notes uploaded by current user"""
+    try:
+        return await note_service.list_user_notes(
+            db, current_user.user_id
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.patch("/{note_id}/approval", response_model=NoteResponse)
 async def approve_or_reject_note(
     note_id: str,
     approval: NoteApprovalUpdate,
     current_user: CurrentUser = Depends(get_current_user),
-    db: Client = Depends(get_db)
+    db: Client = Depends(get_admin_db)
 ):
     """Approve or reject note (teacher only)"""
     require_teacher(current_user)
@@ -51,3 +65,21 @@ async def approve_or_reject_note(
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+@router.delete("/{note_id}")
+async def delete_note(
+    note_id: str,
+    current_user: CurrentUser = Depends(get_current_user),
+    db: Client = Depends(get_admin_db)
+):
+    """Delete note (author only, pending only)"""
+    try:
+        success = await note_service.delete_note(
+            db, current_user.user_id, note_id
+        )
+        if not success:
+            raise HTTPException(status_code=403, detail="Not authorized or note not found")
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

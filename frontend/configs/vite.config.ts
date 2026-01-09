@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
+  root: path.resolve(__dirname, "../src"),
+  build: {
+    outDir: "../dist",
+    emptyOutDir: true,
+  },
   envDir: "..",
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   publicDir: "../public",

@@ -6,9 +6,11 @@ import { TeacherDashboard } from '../dashboard/TeacherDashboard';
 import { ClassroomView } from '../classroom/ClassroomView';
 import { SubjectView } from '../subject/SubjectView';
 import { ChapterView } from '../chapter/ChapterView';
+import { AnnouncementsView } from '../dashboard/AnnouncementsView';
+import { MyNotesView } from '../dashboard/MyNotesView';
 import { Classroom, Subject, Chapter } from '@/types';
 
-type AppView = 'dashboard' | 'classroom' | 'subject' | 'chapter';
+type AppView = 'dashboard' | 'classroom' | 'subject' | 'chapter' | 'announcements' | 'my-notes';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -81,9 +83,39 @@ const Index = () => {
     return <ClassroomView classroom={selectedClassroom} onBack={handleBackToDashboard} onSelectSubject={handleSelectSubject} />;
   }
 
+  if (currentView === 'announcements') {
+    return (
+      <div>
+        <div className="p-4 border-b flex items-center gap-4">
+          <button onClick={handleBackToDashboard} className="text-sm hover:underline">← Back to Dashboard</button>
+        </div>
+        <AnnouncementsView />
+      </div>
+    );
+  }
+
+  if (currentView === 'my-notes') {
+    return (
+      <div>
+        <div className="p-4 border-b flex items-center gap-4">
+          <button onClick={handleBackToDashboard} className="text-sm hover:underline">← Back to Dashboard</button>
+        </div>
+        <MyNotesView />
+      </div>
+    );
+  }
+
   return user?.role === 'teacher'
-    ? <TeacherDashboard onSelectClassroom={handleSelectClassroom} />
-    : <StudentDashboard onSelectClassroom={handleSelectClassroom} />;
+    ? <TeacherDashboard
+      onSelectClassroom={handleSelectClassroom}
+      onViewAnnouncements={() => setCurrentView('announcements')}
+      onViewMyNotes={() => setCurrentView('my-notes')}
+    />
+    : <StudentDashboard
+      onSelectClassroom={handleSelectClassroom}
+      onViewAnnouncements={() => setCurrentView('announcements')}
+      onViewMyNotes={() => setCurrentView('my-notes')}
+    />;
 };
 
 export default Index;

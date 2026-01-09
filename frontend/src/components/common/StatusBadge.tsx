@@ -1,8 +1,8 @@
-import { NoteStatus } from '@/types';
+import { NoteApprovalStatus } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface StatusBadgeProps {
-  status: NoteStatus;
+  status: NoteApprovalStatus;
   className?: string;
 }
 

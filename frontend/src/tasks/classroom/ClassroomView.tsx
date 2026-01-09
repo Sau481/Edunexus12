@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { BookOpen, ChevronRight, UserPlus } from 'lucide-react';
+import { BookOpen, ChevronRight, Users, Trash2 } from 'lucide-react';
 import { Header } from '@/components/layout/Header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Classroom, Subject } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { ManageTeacherAccessDialog } from '@/tasks/teacher-access/ManageTeacherAccessDialog';
+import { dashboardService } from '@/tasks/dashboard/service';
+import { toast } from 'sonner';
 
 interface ClassroomViewProps {
   classroom: Classroom;
@@ -18,37 +18,34 @@ interface ClassroomViewProps {
 
 export const ClassroomView = ({ classroom, onBack, onSelectSubject }: ClassroomViewProps) => {
   const { user } = useAuth();
-  const isClassOwner = user?.role === 'teacher' && classroom.teacherId === 'teacher-1';
-  
+  const isTeacher = user?.role === 'teacher';
+
   const [accessDialogOpen, setAccessDialogOpen] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-  const [teacherEmail, setTeacherEmail] = useState('');
-  const [subjects, setSubjects] = useState(classroom.subjects);
-
-  const handleGiveAccess = () => {
-    if (!selectedSubject || !teacherEmail.trim()) return;
-    
-    setSubjects(subjects.map(s => {
-      if (s.id === selectedSubject.id) {
-        return {
-          ...s,
-          subjectTeacherId: `teacher-${Date.now()}`,
-          subjectTeacherName: teacherEmail,
-        };
-      }
-      return s;
-    }));
-    
-    setAccessDialogOpen(false);
-    setSelectedSubject(null);
-    setTeacherEmail('');
-  };
+  const subjects = classroom.subjects || [];
 
   const openAccessDialog = (e: React.MouseEvent, subject: Subject) => {
     e.stopPropagation();
     setSelectedSubject(subject);
-    setTeacherEmail('');
     setAccessDialogOpen(true);
+  };
+
+  const handleDeleteSubject = async (e: React.MouseEvent, subjectId: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this subject?')) return;
+    try {
+      await dashboardService.deleteSubject(subjectId);
+      toast.success('Subject deleted');
+      // Optimistically remove from list? 
+      // Since subjects prop comes from parent, we might need a refresh callback.
+      // For now, reload window or ignore (parent refresh is better).
+      // Let's assume onBack triggers refresh, but here we stay.
+      // Actually, we should probably force reload or have an onSubjectDeleted prop.
+      window.location.reload();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete subject');
+    }
   };
 
   const container = {
@@ -76,7 +73,7 @@ export const ClassroomView = ({ classroom, onBack, onSelectSubject }: ClassroomV
         >
           <h1 className="text-2xl font-bold">{classroom.name}</h1>
           <p className="text-muted-foreground mt-1">
-            {subjects.length} subjects • {classroom.studentCount} students
+            {subjects.length} subjects • {classroom.member_count || 0} members
           </p>
         </motion.div>
 
@@ -94,18 +91,28 @@ export const ClassroomView = ({ classroom, onBack, onSelectSubject }: ClassroomV
               >
                 <CardHeader className="pb-3">
                   <CardTitle className="flex items-center gap-3 text-base">
-                    <span className="text-2xl">{subject.icon || '📚'}</span>
+                    <span className="text-2xl">📚</span>
                     <span className="flex-1">{subject.name}</span>
-                    {isClassOwner && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => openAccessDialog(e, subject)}
-                        title="Give subject access"
-                      >
-                        <UserPlus className="h-4 w-4" />
-                      </Button>
+                    {isTeacher && (
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => openAccessDialog(e, subject)}
+                          title="Manage teacher access"
+                        >
+                          <Users className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={(e) => handleDeleteSubject(e, subject.id)}
+                          title="Delete Subject"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     )}
                     <ChevronRight className="h-5 w-5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </CardTitle>
@@ -113,27 +120,7 @@ export const ClassroomView = ({ classroom, onBack, onSelectSubject }: ClassroomV
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <BookOpen className="h-4 w-4" />
-                    {subject.chapters.length} chapters
-                  </div>
-                  {subject.subjectTeacherName && (
-                    <p className="text-xs text-primary mt-1">
-                      Subject Teacher: {subject.subjectTeacherName}
-                    </p>
-                  )}
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {subject.chapters.slice(0, 3).map((chapter, idx) => (
-                      <span
-                        key={chapter.id}
-                        className="text-xs px-2 py-1 bg-secondary rounded-full text-secondary-foreground"
-                      >
-                        Unit {idx + 1}
-                      </span>
-                    ))}
-                    {subject.chapters.length > 3 && (
-                      <span className="text-xs px-2 py-1 text-muted-foreground">
-                        +{subject.chapters.length - 3} more
-                      </span>
-                    )}
+                    {subject.description || 'No description'}
                   </div>
                 </CardContent>
               </Card>
@@ -154,45 +141,15 @@ export const ClassroomView = ({ classroom, onBack, onSelectSubject }: ClassroomV
         )}
       </main>
 
-      {/* Give Subject Access Dialog */}
-      <Dialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Give Subject Access</DialogTitle>
-            <DialogDescription>
-              Assign a teacher to manage "{selectedSubject?.name}"
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="teacherEmail">Teacher Email</Label>
-              <Input
-                id="teacherEmail"
-                type="email"
-                placeholder="teacher@example.com"
-                value={teacherEmail}
-                onChange={(e) => setTeacherEmail(e.target.value)}
-              />
-            </div>
-            {selectedSubject?.subjectTeacherName && (
-              <p className="text-sm text-muted-foreground">
-                Current: {selectedSubject.subjectTeacherName}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAccessDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleGiveAccess} 
-              disabled={!teacherEmail.trim()}
-            >
-              Give Access
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Manage Teacher Access Dialog */}
+      {selectedSubject && (
+        <ManageTeacherAccessDialog
+          isOpen={accessDialogOpen}
+          onClose={() => setAccessDialogOpen(false)}
+          subjectId={selectedSubject.id}
+          subjectName={selectedSubject.name}
+        />
+      )}
     </div>
   );
 };
