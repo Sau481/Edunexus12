@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     # Application
     APP_ENV: str = "development"
     DEBUG: bool = True
-    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080"]
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173", "http://localhost:8080","https://edunexus12.vercel.app/"]
     
     model_config = ConfigDict(
         case_sensitive=True,
